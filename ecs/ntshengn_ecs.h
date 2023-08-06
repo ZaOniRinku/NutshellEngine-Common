@@ -12,7 +12,6 @@
 #include "components/ntshengn_ecs_audio_emitter.h"
 #include "components/ntshengn_ecs_audio_listener.h"
 #include "components/ntshengn_ecs_scriptable.h"
-#include <stdexcept>
 #include <bitset>
 #include <deque>
 #include <array>
@@ -32,84 +31,21 @@ namespace NtshEngn {
 
 	class EntityManager {
 	public:
-		EntityManager() {
-			for (Entity entity = 0; entity < MAX_ENTITIES; entity++) {
-				m_availableEntities.push_back(entity);
-			}
-		}
+		EntityManager();
 
-		Entity createEntity() {
-			NTSHENGN_ASSERT(m_numberOfEntities < MAX_ENTITIES);
+		Entity createEntity();
+		Entity createEntity(const std::string& name);
+		void destroyEntity(Entity entity);
 
-			Entity id = m_availableEntities.front();
-			m_availableEntities.pop_front();
-			m_numberOfEntities++;
+		void setComponents(Entity entity, ComponentMask componentMask);
+		ComponentMask getComponents(Entity entity);
 
-			m_existingEntities.insert(id);
+		bool entityHasName(Entity entity);
+		void setEntityName(Entity entity, const std::string& name);
+		std::string getEntityName(Entity entity);
+		Entity findEntityByName(const std::string& name);
 
-			return id;
-		}
-
-		Entity createEntity(const std::string& name) {
-			NTSHENGN_ASSERT(!m_entityNames.exist(name));
-
-			Entity id = createEntity();
-			m_entityNames.insert_or_assign(id, name);
-
-			return id;
-		}
-
-		void destroyEntity(Entity entity) {
-			NTSHENGN_ASSERT(entity < MAX_ENTITIES);
-
-			m_componentMasks[entity].reset();
-			m_availableEntities.push_front(entity);
-			m_numberOfEntities--;
-
-			m_existingEntities.erase(entity);
-
-			if (m_entityNames.exist(entity)) {
-				m_entityNames.erase(entity);
-			}
-		}
-
-		void setComponents(Entity entity, ComponentMask componentMask) {
-			NTSHENGN_ASSERT(entity < MAX_ENTITIES);
-
-			m_componentMasks[entity] = componentMask;
-		}
-
-		ComponentMask getComponents(Entity entity) {
-			NTSHENGN_ASSERT(entity < MAX_ENTITIES);
-
-			return m_componentMasks[entity];
-		}
-
-		bool entityHasName(Entity entity) {
-			return m_entityNames.exist(entity);
-		}
-
-		void setEntityName(Entity entity, const std::string& name) {
-			NTSHENGN_ASSERT(!m_entityNames.exist(name));
-
-			m_entityNames.insert_or_assign(entity, name);
-		}
-
-		std::string getEntityName(Entity entity) {
-			NTSHENGN_ASSERT(m_entityNames.exist(entity));
-
-			return m_entityNames[entity];
-		}
-
-		Entity findEntityByName(const std::string& name) {
-			NTSHENGN_ASSERT(m_entityNames.exist(name));
-
-			return m_entityNames[name];
-		}
-
-		const std::set<Entity>& getExistingEntities() {
-			return m_existingEntities;
-		}
+		const std::set<Entity>& getExistingEntities():
 
 	private:
 		std::deque<Entity> m_availableEntities;
@@ -215,18 +151,9 @@ namespace NtshEngn {
 			return getComponentArray<T>()->getData(entity);
 		}
 
-		void entityDestroyed(Entity entity) {
-			for (const auto& pair : m_componentArrays) {
-				const std::shared_ptr<IComponentArray>& componentArray = pair.second;
-				componentArray->entityDestroyed(entity);
-			}
-		}
+		void entityDestroyed(Entity entity);
 
 	private:
-		std::unordered_map<std::string, Component> m_componentTypes;
-		std::unordered_map<std::string, std::shared_ptr<IComponentArray>> m_componentArrays;
-		Component m_nextComponent = 0;
-
 		template <typename T>
 		std::shared_ptr<ComponentArray<T>> getComponentArray() {
 			std::string typeName = std::string(typeid(T).name());
@@ -235,6 +162,11 @@ namespace NtshEngn {
 
 			return std::static_pointer_cast<ComponentArray<T>>(m_componentArrays[typeName]);
 		}
+
+	private:
+		std::unordered_map<std::string, Component> m_componentTypes;
+		std::unordered_map<std::string, std::shared_ptr<IComponentArray>> m_componentArrays;
+		Component m_nextComponent = 0;
 	};
 
 	class System {
@@ -266,50 +198,9 @@ namespace NtshEngn {
 			m_componentMasks.insert({ typeName, componentMask });
 		}
 
-		void entityDestroyed(Entity entity, ComponentMask entityComponents) {
-			for (const auto& pair : m_systems) {
-				const std::string& type = pair.first;
-				System* system = pair.second;
-				const ComponentMask systemComponentMask = m_componentMasks[type];
-				const ComponentMask entityAndSystemComponentMask = entityComponents & systemComponentMask;
+		void entityDestroyed(Entity entity, ComponentMask entityComponents);
 
-				bool entityInSystem = false;
-				for (uint8_t i = 0; i < MAX_COMPONENTS; i++) {
-					if (entityAndSystemComponentMask[i]) {
-						entityInSystem = true;
-						system->onEntityComponentRemoved(entity, i);
-					}
-				}
-
-				if (entityInSystem) {
-					system->entities.erase(entity);
-				}
-			}
-		}
-
-		void entityComponentMaskChanged(Entity entity, ComponentMask oldEntityComponentMask, ComponentMask newEntityComponentMask, Component componentID) {
-			for (const auto& pair : m_systems) {
-				const std::string& type = pair.first;
-				System* system = pair.second;
-				const ComponentMask systemComponentMask = m_componentMasks[type];
-				const ComponentMask oldAndSystemComponentMasks = oldEntityComponentMask & systemComponentMask;
-				const ComponentMask newAndSystemComponentMasks = newEntityComponentMask & systemComponentMask;
-				if (oldAndSystemComponentMasks != newAndSystemComponentMasks) { // A Component used in the system has been added or removed
-					if (newAndSystemComponentMasks.to_ulong() > oldAndSystemComponentMasks.to_ulong()) { // A Component has been added
-						system->onEntityComponentAdded(entity, componentID);
-						if (oldAndSystemComponentMasks.none()) { // The entity is new in the system
-							system->entities.insert(entity);
-						}
-					}
-					else if (newAndSystemComponentMasks.to_ulong() < oldAndSystemComponentMasks.to_ulong()) { // A Component has been removed
-						system->onEntityComponentRemoved(entity, componentID);
-						if (newAndSystemComponentMasks.none()) { // The entity has no more component for the system
-							system->entities.erase(entity);
-						}
-					}
-				}
-			}
-		}
+		void entityComponentMaskChanged(Entity entity, ComponentMask oldEntityComponentMask, ComponentMask newEntityComponentMask, Component componentID);
 
 	private:
 		std::unordered_map<std::string, ComponentMask> m_componentMasks;
@@ -318,55 +209,17 @@ namespace NtshEngn {
 
 	class ECS {
 	public:
-		void init() {
-			m_entityManager = std::make_unique<EntityManager>();
-			m_componentManager = std::make_unique<ComponentManager>();
-			m_systemManager = std::make_unique<SystemManager>();
-		}
+		void init();
 
 		// Entity
-		Entity createEntity() {
-			Entity newEntity = m_entityManager->createEntity();
-			addComponent(newEntity, Transform{});
-			
-			return newEntity;
-		}
-
-		Entity createEntity(const std::string& name) {
-			Entity newEntity = m_entityManager->createEntity(name);
-			addComponent(newEntity, Transform{});
-			
-			return newEntity;
-		}
-
-		void destroyEntity(Entity entity) {
-			ComponentMask entityComponents = m_entityManager->getComponents(entity);
-			m_systemManager->entityDestroyed(entity, entityComponents);
-			m_entityManager->destroyEntity(entity);
-			m_componentManager->entityDestroyed(entity);
-		}
-
-		void destroyAllEntities() {
-			while (!m_entityManager->getExistingEntities().empty()) {
-				destroyEntity(*m_entityManager->getExistingEntities().rbegin());
-			}
-		}
-
-		void setEntityName(Entity entity, const std::string& name) {
-			m_entityManager->setEntityName(entity, name);
-		}
-
-		bool entityHasName(Entity entity) {
-			return m_entityManager->entityHasName(entity);
-		}
-
-		std::string getEntityName(Entity entity) {
-			return m_entityManager->getEntityName(entity);
-		}
-
-		Entity findEntityByName(const std::string& name) {
-			return m_entityManager->findEntityByName(name);
-		}
+		Entity createEntity();
+		Entity createEntity(const std::string& name);
+		void destroyEntity(Entity entity);
+		void destroyAllEntities();
+		void setEntityName(Entity entity, const std::string& name);
+		bool entityHasName(Entity entity);
+		std::string getEntityName(Entity entity);
+		Entity findEntityByName(const std::string& name);
 
 		// Component
 		template <typename T>
@@ -421,7 +274,6 @@ namespace NtshEngn {
 		void setSystemComponents(ComponentMask componentMask) {
 			m_systemManager->setComponents<T>(componentMask);
 		}
-
 	private:
 		std::unique_ptr<EntityManager> m_entityManager;
 		std::unique_ptr<ComponentManager> m_componentManager;
