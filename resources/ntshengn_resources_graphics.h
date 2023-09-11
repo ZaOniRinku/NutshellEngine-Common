@@ -137,6 +137,30 @@ namespace NtshEngn {
 		float indexOfRefraction = 1.0f;
 	};
 
+	// Animation
+	enum class AnimationInterpolationType {
+		Step,
+		Linear,
+		CubicSpline,
+		Unknown
+	};
+
+	struct AnimationJointTransform {
+		Math::vec3 translation = { 0.0f, 0.0f, 0.0f };
+		Math::quat rotation = { 0.0f, 0.0f, 0.0f, 0.0f };
+		Math::vec3 scale = { 1.0f, 1.0f, 1.0f };
+	};
+
+	struct AnimationKeyframe {
+		float timestamp;
+		AnimationJointTransform jointTransform;
+	};
+
+	struct Animation {
+		std::unordered_map<uint32_t, std::vector<AnimationKeyframe>> jointKeyframes;
+		AnimationInterpolationType interpolationType = AnimationInterpolationType::Unknown;
+	};
+
 	// Mesh
 	typedef uint32_t MeshID;
 	#define NTSHENGN_MESH_UNKNOWN 0xFFFFFFFF
@@ -152,18 +176,27 @@ namespace NtshEngn {
 
 	// Vertex
 	struct Vertex {
-		Math::vec3 position = { 0.0f, 0.0f, 0.0f };
-		Math::vec3 normal = { 0.0f, 0.0f, 0.0f };
-		Math::vec2 uv = { 0.0f, 0.0f };
-		Math::vec3 color = { 0.0f, 0.0f, 0.0f };
-		Math::vec4 tangent = { 0.0f, 0.0f, 0.0f, 0.0f };
+		Math::vec3 position;
+		Math::vec3 normal;
+		Math::vec2 uv;
+		Math::vec3 color;
+		Math::vec4 tangent;
 		std::array<uint32_t, 4> joints = { 0, 0, 0, 0 };
-		Math::vec4 weights = { 0.0f, 0.0f, 0.0f, 0.0f };
+		Math::vec4 weights;
+	};
+
+	// Joint
+	struct Joint {
+		Math::mat4 inverseBindMatrix;
+		Math::mat4 inverseGlobalTransform;
+		Math::mat4 baseTransform;
+		std::vector<uint32_t> children;
 	};
 
 	struct Mesh {
 		std::vector<Vertex> vertices;
 		std::vector<uint32_t> indices;
+		std::vector<Joint> joints;
 		MeshTopology topology = MeshTopology::Unknown;
 	};
 
@@ -175,6 +208,7 @@ namespace NtshEngn {
 
 	struct Model {
 		std::vector<ModelPrimitive> primitives;
+		std::vector<Animation> animations;
 	};
 
 	// Font
