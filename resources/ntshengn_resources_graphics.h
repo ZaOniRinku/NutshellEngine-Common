@@ -138,27 +138,33 @@ namespace NtshEngn {
 	};
 
 	// Animation
-	enum class AnimationInterpolationType {
+	enum class AnimationChannelInterpolationType {
 		Step,
 		Linear,
 		CubicSpline,
 		Unknown
 	};
 
-	struct AnimationJointTransform {
-		Math::vec3 translation = { 0.0f, 0.0f, 0.0f };
-		Math::quat rotation = { 0.0f, 0.0f, 0.0f, 0.0f };
-		Math::vec3 scale = { 1.0f, 1.0f, 1.0f };
+	enum class AnimationChannelTransformType {
+		Translation,
+		Rotation,
+		Scale,
+		Unknown
 	};
 
 	struct AnimationKeyframe {
 		float timestamp;
-		AnimationJointTransform jointTransform;
+		Math::vec4 value;
+	};
+
+	struct AnimationChannel {
+		AnimationChannelInterpolationType interpolationType = AnimationChannelInterpolationType::Unknown;
+		AnimationChannelTransformType transformType = AnimationChannelTransformType::Unknown;
+		std::vector<AnimationKeyframe> keyframes;
 	};
 
 	struct Animation {
-		std::unordered_map<uint32_t, std::vector<AnimationKeyframe>> jointKeyframes;
-		AnimationInterpolationType interpolationType = AnimationInterpolationType::Unknown;
+		std::unordered_map<uint32_t, std::vector<AnimationChannel>> jointChannels;
 	};
 
 	// Mesh
